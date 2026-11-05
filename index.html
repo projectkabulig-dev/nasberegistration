@@ -364,11 +364,12 @@ function demoApi(action,p){
   const rows=lsGet("dm418_demo",[]);
   if(action==="status") return {ok:true,count:rows.length,countE:rows.filter(x=>x.entry==="E").length,countS:rows.filter(x=>x.entry==="S").length,quota:QUOTA};
   if(action==="find"){ const r=rows.find(x=>x.ref.toLowerCase()===String(p.code||"").trim().toLowerCase()); return r?{ok:true,record:r}:{ok:false,error:"NOTFOUND"}; }
-  if(action==="lookup"){ const r=rows.find(x=>x.last.toLowerCase()===String(p.last).toLowerCase()&&x.first.toLowerCase()===String(p.first).toLowerCase()&&x.school===p.school); return r?{ok:true,record:r}:{ok:false,error:"NOTFOUND"}; }
+  if(action==="lookup"){ const r=rows.find(x=>x.last.toLowerCase()===String(p.last).toLowerCase()&&x.first.toLowerCase()===String(p.first).toLowerCase()&&x.school===p.school&&(!p.entry||x.entry===p.entry)); return r?{ok:true,record:r}:{ok:false,error:"NOTFOUND"}; }
   if(action==="register"){
     const d=p.record;
     if(rows.filter(x=>x.entry===d.entry).length>=QUOTA) return {ok:false,error:"FULL"};
-    if(rows.some(x=>x.last.toLowerCase()===d.last.toLowerCase()&&x.first.toLowerCase()===d.first.toLowerCase()&&x.school===d.school)) return {ok:false,error:"DUPLICATE"};
+    const dup=rows.find(x=>x.last.toLowerCase()===d.last.toLowerCase()&&x.first.toLowerCase()===d.first.toLowerCase()&&x.school===d.school&&x.entry===d.entry);
+    if(dup) return {ok:false,error:"DUPLICATE",record:dup};
     const n=rows.reduce((m,x)=>Math.max(m,parseInt(x.ref.split("-")[1],10)||0),0)+1;
     const rec={...d,ref:"DM418-"+String(n).padStart(3,"0"),ts:new Date().toISOString()};
     rows.push(rec); lsSet("dm418_demo",rows); return {ok:true,record:rec};
@@ -491,14 +492,19 @@ $("form").addEventListener("submit",async ev=>{
   }
   const food=foods.map(f=>(f==="Allergy"||f==="Others")&&detail?f+": "+detail:f).join("; ");
   $("btnSubmit").disabled=true; $("btnSubmit").textContent="Submitting...";
+  const t0=Date.now();
   let r=await api("register",{record:{entry,last,first,mi,district,school,sex,food}});
-  if(!r.ok&&(r.error==="NETWORK"||r.error==="BADRESP")){ const chk=await api("lookup",{last,first,school}); if(chk.ok) r=chk; }
+  if(!r.ok&&(r.error==="NETWORK"||r.error==="BADRESP")){ const chk=await api("lookup",{last,first,school,entry}); if(chk.ok&&chk.record.entry===entry&&Date.parse(chk.record.ts)>=t0-120000) r=chk; }
   $("btnSubmit").disabled=false; $("btnSubmit").textContent="Submit registration";
   if(r.ok){
     saveMine(r.record); registered=true; entry=null; await refreshStatus(); showDone(r.record); renderMine(); resetForm();
     $("formWrap").classList.add("hidden"); $("formLocked").classList.remove("hidden"); go(5);
   }else if(r.error==="FULL"){ await refreshStatus(); info("This batch is closed","All 45 slots for this batch are taken. Your registration was not saved.",()=>{ entry=null; go(0); }); }
-  else if(r.error==="DUPLICATE"&&r.record){ saveMine(r.record); registered=true; entry=null; showDone(r.record); renderMine(); resetForm(); $("formWrap").classList.add("hidden"); $("formLocked").classList.remove("hidden"); go(5); }
+  else if(r.error==="DUPLICATE"&&r.record){
+    const ex=r.record, EX=ENTRIES[ex.entry]||ENTRIES.E;
+    saveMine(ex); registered=true; showDone(ex); renderMine();
+    info("Already registered","This name and school are already registered in this level as "+EX.label+" ("+EX.batch+") with code "+ex.ref+". No new registration was made. If this is a mistake, ask the administrator to delete the old one first.",()=>{ entry=null; resetForm(); $("formWrap").classList.add("hidden"); $("formLocked").classList.remove("hidden"); go(5); });
+  }
   else if(r.error==="DUPLICATE") formError("This name is already registered for this school. Open \u201cMy registration\u201d (last page) to view it.");
   else formError(r.error==="BADRESP"||r.error==="SERVER"?"The server answered with an error ("+r.error+(r.detail?": "+r.detail:"")+"). Tell the administrator to check the Apps Script deployment.":"Cannot reach the server. Check your connection and try again.");
 });
