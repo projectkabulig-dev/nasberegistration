@@ -346,21 +346,22 @@ function myRecs(){ return lsGet("dm418_mine",[]); }
 function saveMine(r){ const a=myRecs().filter(x=>x.ref!==r.ref); a.unshift(r); lsSet("dm418_mine",a.slice(0,10)); }
 
 /* ============ API ============ */
+function parseResp(txt){ try{ return JSON.parse(txt); }catch(e){ return {ok:false,error:"BADRESP"}; } }
 async function api(action,payload={}){
   if(!API_URL) return demoApi(action,payload);
   try{
-    if(action==="register"||action==="delete"){
-      const res=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action,...payload})});
-      return await res.json();
-    }
-    const res=await fetch(API_URL+"?"+new URLSearchParams({action,...payload}).toString());
-    return await res.json();
+    const q={action};
+    Object.keys(payload).forEach(k=>{ q[k]=(k==="record")?JSON.stringify(payload[k]):payload[k]; });
+    if(action==="register"){ q.data=q.record; delete q.record; }
+    const res=await fetch(API_URL+"?"+new URLSearchParams(q).toString());
+    return parseResp(await res.text());
   }catch(e){ return {ok:false,error:"NETWORK"}; }
 }
 function demoApi(action,p){
   const rows=lsGet("dm418_demo",[]);
   if(action==="status") return {ok:true,count:rows.length,quota:QUOTA};
   if(action==="find"){ const r=rows.find(x=>x.ref.toLowerCase()===String(p.code||"").trim().toLowerCase()); return r?{ok:true,record:r}:{ok:false,error:"NOTFOUND"}; }
+  if(action==="lookup"){ const r=rows.find(x=>x.last.toLowerCase()===String(p.last).toLowerCase()&&x.first.toLowerCase()===String(p.first).toLowerCase()&&x.school===p.school); return r?{ok:true,record:r}:{ok:false,error:"NOTFOUND"}; }
   if(action==="register"){
     if(rows.length>=QUOTA) return {ok:false,error:"FULL"};
     const d=p.record;
@@ -478,14 +479,16 @@ $("form").addEventListener("submit",async ev=>{
   }
   const food=foods.map(f=>(f==="Allergy"||f==="Others")&&detail?f+": "+detail:f).join("; ");
   $("btnSubmit").disabled=true; $("btnSubmit").textContent="Submitting...";
-  const r=await api("register",{record:{entry,last,first,mi,district,school,sex,food}});
+  let r=await api("register",{record:{entry,last,first,mi,district,school,sex,food}});
+  if(!r.ok&&(r.error==="NETWORK"||r.error==="BADRESP")){ const chk=await api("lookup",{last,first,school}); if(chk.ok) r=chk; }
   $("btnSubmit").disabled=false; $("btnSubmit").textContent="Submit registration";
   if(r.ok){
     saveMine(r.record); registered=true; entry=null; await refreshStatus(); showDone(r.record); renderMine(); resetForm();
     $("formWrap").classList.add("hidden"); $("formLocked").classList.remove("hidden"); go(5);
   }else if(r.error==="FULL"){ await refreshStatus(); info("Registration is closed","All 45 slots are taken. Your registration was not saved.",()=>{ entry=null; go(0); }); }
+  else if(r.error==="DUPLICATE"&&r.record){ saveMine(r.record); registered=true; entry=null; showDone(r.record); renderMine(); resetForm(); $("formWrap").classList.add("hidden"); $("formLocked").classList.remove("hidden"); go(5); }
   else if(r.error==="DUPLICATE") formError("This name is already registered for this school. Open \u201cMy registration\u201d (last page) to view it.");
-  else formError("Cannot reach the server. Check your connection and try again.");
+  else formError(r.error==="BADRESP"||r.error==="SERVER"?"The server answered with an error ("+r.error+(r.detail?": "+r.detail:"")+"). Tell the administrator to check the Apps Script deployment.":"Cannot reach the server. Check your connection and try again.");
 });
 $("wOk").addEventListener("click",()=>{
   $("mWarn").classList.add("hidden"); entry=null; resetForm();
