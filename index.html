@@ -55,6 +55,10 @@ h2.st{font-size:clamp(24px,4.4vw,32px);line-height:1.15;margin:0 0 6px;font-weig
 .grid45{display:grid;grid-template-columns:repeat(15,1fr);gap:6px}
 .grid45 i{aspect-ratio:1;border-radius:50%;background:#ffffff26;border:1px solid #ffffff2a}
 .grid45 i.on{background:var(--gold);border-color:var(--gold);box-shadow:0 0 0 2px #fcd11633}
+.seat-row+.seat-row{margin-top:14px}
+.seat-row .lab{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;font-size:14px;font-weight:700}
+.seat-row .lab small{font-weight:600;opacity:.8}
+.seat-row.full .lab span+span,.seat-row.full small{color:var(--gold)}
 .seats .foot{margin-top:10px;font-size:13px;opacity:.88}
 .hint{margin-top:22px;display:flex;align-items:center;gap:10px;font-weight:700;color:var(--gold)}
 .hint svg{animation:nudge 1.6s ease-in-out infinite}
@@ -186,9 +190,8 @@ table.t{border-collapse:collapse;width:100%;font-size:14px;min-width:760px}
     <div class="venue"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>Venue: FAAS LOFTS, San Agustin, Romblon</div>
     <div class="seats" id="seatsCard" aria-live="polite">
       <h3>Slots taken</h3>
-      <div class="big"><span id="seatCount">0</span> <small>of 45</small></div>
-      <div class="grid45" id="grid45" aria-hidden="true"></div>
-      <div class="foot" id="seatFoot">Registration is open. First come, first served.</div>
+      <div class="seat-row" id="rowE"><div class="lab"><span>Elementary (Batch 1)</span><span><span id="cntE">0</span> of 45</span></div><div class="grid45" id="gridE" aria-hidden="true"></div><div class="foot" id="footE"></div></div>
+      <div class="seat-row" id="rowS"><div class="lab"><span>Secondary (Batch 2)</span><span><span id="cntS">0</span> of 45</span></div><div class="grid45" id="gridS" aria-hidden="true"></div><div class="foot" id="footS"></div></div>
     </div>
     <div class="hint">Swipe to continue <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
     <div style="margin-top:10px"><button class="textlink" id="lnkMine">Already registered? View my registration</button></div>
@@ -232,7 +235,7 @@ table.t{border-collapse:collapse;width:100%;font-size:14px;min-width:760px}
       <button class="entry sec" id="btnSec" data-entry="S"><span class="tag">Batch 2</span><h3>Secondary</h3><p>Selected secondary school heads. Nov 19&ndash;20, 2026. Dinner starts Nov 18.</p>
         <span class="go">Register <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></button>
     </div>
-    <div class="err hidden" id="fullMsg" style="font-size:15px">Registration is closed. All 45 slots are taken.</div>
+    <div class="err hidden" id="fullMsg" style="font-size:15px">This batch is closed. All 45 slots are taken.</div>
   </div></section>
 
   <!-- 5 FORM -->
@@ -312,7 +315,7 @@ table.t{border-collapse:collapse;width:100%;font-size:14px;min-width:760px}
     <div class="finder"><input type="password" id="adminPw" placeholder="Password" autocomplete="current-password"><button class="btn" id="adminGo">Open</button></div>
     <div class="err hidden" id="adminErr"></div></div>
   <div id="adminBody" class="hidden">
-    <div class="stats"><div class="stat"><b id="stTotal">0</b><small>Registered of 45</small></div><div class="stat"><b id="stLeft">45</b><small>Slots left</small></div><div class="stat"><b id="stE">0</b><small>Elementary entry</small></div><div class="stat"><b id="stS">0</b><small>Secondary entry</small></div></div>
+    <div class="stats"><div class="stat"><b id="stTotal">0</b><small>Total registered</small></div><div class="stat"><b id="stE">0</b><small>Elementary of 45</small></div><div class="stat"><b id="stS">0</b><small>Secondary of 45</small></div><div class="stat"><b id="stLeft">45 / 45</b><small>Slots left (Elem / Sec)</small></div></div>
     <b>Food restrictions (for the caterer)</b><div class="foodsum" id="foodSum"></div>
     <div class="actions" style="margin:0 0 14px"><button class="btn sm" id="adminCsv">Export to Excel (CSV)</button><button class="btn sm ghost" id="adminRefresh">Refresh</button></div>
     <div class="tablewrap"><table class="t"><thead><tr><th>Ref</th><th>Entry</th><th>Name</th><th>District</th><th>School</th><th>Sex</th><th>Food</th><th>Registered</th><th></th></tr></thead><tbody id="adminRows"></tbody></table></div>
@@ -359,12 +362,12 @@ async function api(action,payload={}){
 }
 function demoApi(action,p){
   const rows=lsGet("dm418_demo",[]);
-  if(action==="status") return {ok:true,count:rows.length,quota:QUOTA};
+  if(action==="status") return {ok:true,count:rows.length,countE:rows.filter(x=>x.entry==="E").length,countS:rows.filter(x=>x.entry==="S").length,quota:QUOTA};
   if(action==="find"){ const r=rows.find(x=>x.ref.toLowerCase()===String(p.code||"").trim().toLowerCase()); return r?{ok:true,record:r}:{ok:false,error:"NOTFOUND"}; }
   if(action==="lookup"){ const r=rows.find(x=>x.last.toLowerCase()===String(p.last).toLowerCase()&&x.first.toLowerCase()===String(p.first).toLowerCase()&&x.school===p.school); return r?{ok:true,record:r}:{ok:false,error:"NOTFOUND"}; }
   if(action==="register"){
-    if(rows.length>=QUOTA) return {ok:false,error:"FULL"};
     const d=p.record;
+    if(rows.filter(x=>x.entry===d.entry).length>=QUOTA) return {ok:false,error:"FULL"};
     if(rows.some(x=>x.last.toLowerCase()===d.last.toLowerCase()&&x.first.toLowerCase()===d.first.toLowerCase()&&x.school===d.school)) return {ok:false,error:"DUPLICATE"};
     const n=rows.reduce((m,x)=>Math.max(m,parseInt(x.ref.split("-")[1],10)||0),0)+1;
     const rec={...d,ref:"DM418-"+String(n).padStart(3,"0"),ts:new Date().toISOString()};
@@ -417,23 +420,32 @@ document.addEventListener("keydown",e=>{
 window.addEventListener("resize",()=>deck.scrollTo({left:cur*deck.clientWidth}));
 
 /* ============ SLOTS ============ */
-let count=0, full=false;
-for(let i=0;i<QUOTA;i++) $("grid45").appendChild(document.createElement("i"));
+const cnt={E:0,S:0};
+const isFull=k=>cnt[k]>=QUOTA;
+["gridE","gridS"].forEach(id=>{ for(let i=0;i<QUOTA;i++) $(id).appendChild(document.createElement("i")); });
 function paintSeats(){
-  $("seatCount").textContent=count;
-  [...$("grid45").children].forEach((d,i)=>d.classList.toggle("on",i<count));
-  full=count>=QUOTA;
-  $("seatsCard").classList.toggle("full",full);
-  $("seatFoot").textContent=full?"Registration is closed. All 45 slots are taken.":(QUOTA-count)+" slots left. First come, first served.";
-  $("btnElem").disabled=full; $("btnSec").disabled=full; $("fullMsg").classList.toggle("hidden",!full);
+  [["E","btnElem"],["S","btnSec"]].forEach(([k,btn])=>{
+    $("cnt"+k).textContent=cnt[k];
+    [...$("grid"+k).children].forEach((d,i)=>d.classList.toggle("on",i<cnt[k]));
+    $("row"+k).classList.toggle("full",isFull(k));
+    $("foot"+k).textContent=isFull(k)?"Closed. All 45 slots are taken.":(QUOTA-cnt[k])+" slots left.";
+    $(btn).disabled=isFull(k);
+  });
+  $("fullMsg").classList.toggle("hidden",!(isFull("E")||isFull("S")));
+  $("fullMsg").textContent=isFull("E")&&isFull("S")?"Registration is closed. All slots are taken.":(isFull("E")?"Elementary (Batch 1) is closed. All 45 slots are taken.":"Secondary (Batch 2) is closed. All 45 slots are taken.");
 }
-async function refreshStatus(){ const r=await api("status"); if(r&&r.ok){ count=r.count; paintSeats(); } return r; }
+async function refreshStatus(){
+  const r=await api("status");
+  if(r&&r.ok){ cnt.E=r.countE!=null?r.countE:r.count; cnt.S=r.countS!=null?r.countS:0; paintSeats(); }
+  return r;
+}
 
 /* ============ CHOOSE + FORM ============ */
 function info(t,m,cb){ $("iTitle").textContent=t; $("iText").textContent=m; $("mInfo").classList.remove("hidden"); $("iOk").focus(); $("iOk").onclick=()=>{ $("mInfo").classList.add("hidden"); if(cb) cb(); }; }
 [$("btnElem"),$("btnSec")].forEach(b=>b.addEventListener("click",()=>{
-  if(full){ info("Registration is closed","All 45 slots are taken."); return; }
-  chooseEntry(b.dataset.entry);
+  const k=b.dataset.entry;
+  if(isFull(k)){ info("This batch is closed","All 45 slots for "+ENTRIES[k].label+" ("+ENTRIES[k].batch+") are taken."); return; }
+  chooseEntry(k);
 }));
 function chooseEntry(k){
   entry=k; const E=ENTRIES[k];
@@ -485,7 +497,7 @@ $("form").addEventListener("submit",async ev=>{
   if(r.ok){
     saveMine(r.record); registered=true; entry=null; await refreshStatus(); showDone(r.record); renderMine(); resetForm();
     $("formWrap").classList.add("hidden"); $("formLocked").classList.remove("hidden"); go(5);
-  }else if(r.error==="FULL"){ await refreshStatus(); info("Registration is closed","All 45 slots are taken. Your registration was not saved.",()=>{ entry=null; go(0); }); }
+  }else if(r.error==="FULL"){ await refreshStatus(); info("This batch is closed","All 45 slots for this batch are taken. Your registration was not saved.",()=>{ entry=null; go(0); }); }
   else if(r.error==="DUPLICATE"&&r.record){ saveMine(r.record); registered=true; entry=null; showDone(r.record); renderMine(); resetForm(); $("formWrap").classList.add("hidden"); $("formLocked").classList.remove("hidden"); go(5); }
   else if(r.error==="DUPLICATE") formError("This name is already registered for this school. Open \u201cMy registration\u201d (last page) to view it.");
   else formError(r.error==="BADRESP"||r.error==="SERVER"?"The server answered with an error ("+r.error+(r.detail?": "+r.detail:"")+"). Tell the administrator to check the Apps Script deployment.":"Cannot reach the server. Check your connection and try again.");
@@ -584,8 +596,9 @@ async function loadAdmin(){
 }
 function renderAdmin(){
   const a=adminRows;
-  $("stTotal").textContent=a.length; $("stLeft").textContent=Math.max(0,QUOTA-a.length);
-  $("stE").textContent=a.filter(x=>x.entry==="E").length; $("stS").textContent=a.filter(x=>x.entry==="S").length;
+  const nE=a.filter(x=>x.entry==="E").length, nS=a.filter(x=>x.entry==="S").length;
+  $("stTotal").textContent=a.length; $("stE").textContent=nE; $("stS").textContent=nS;
+  $("stLeft").textContent=Math.max(0,QUOTA-nE)+" / "+Math.max(0,QUOTA-nS);
   const tally={}; a.forEach(x=>String(x.food).split("; ").forEach(f=>{ const k=f.split(":")[0]; tally[k]=(tally[k]||0)+1; }));
   $("foodSum").innerHTML=Object.keys(tally).map(k=>"<span>"+esc(k)+": "+tally[k]+"</span>").join("")||"<span>No data yet</span>";
   $("adminRows").innerHTML=a.map(x=>"<tr><td class='code'>"+esc(x.ref)+"</td><td>"+esc((ENTRIES[x.entry]||{}).label)+"</td><td>"+esc(fullName(x))+"</td><td>"+esc(x.district)+"</td><td>"+esc(x.school)+"</td><td>"+esc(x.sex)+"</td><td>"+esc(x.food)+"</td><td>"+esc(fmtDate(x.ts))+"</td><td><button class='btn sm ghost' data-del='"+esc(x.ref)+"'>Delete</button></td></tr>").join("");
